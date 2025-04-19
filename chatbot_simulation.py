@@ -106,5 +106,58 @@ def evaluate_and_email():
         for m in st.session_state.messages
     ])
 
-    evaluation_prompt = f"""You are a trainer at an OnlyFans agency. The following is a_
+    evaluation_prompt = f"""You are a trainer at an OnlyFans agency. The following is a chat between a chatter and a fan.
+Rate the chatter on the following out of 10:
+- Natural tone & slang usage
+- Progressive upselling
+- Emotional connection
+- Pricing confidence
+- Handling objections
+
+Then give 3 suggestions for improvement in a professional but helpful tone.
+
+Conversation:
+{conversation}
+"""
+
+    eval_response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": evaluation_prompt}],
+        temperature=0.6
+    )
+
+    feedback = eval_response.choices[0].message.content
+
+    # Score out of 100
+    scores = re.findall(r"(\d+)/10", feedback)
+    final_score = sum([int(s) for s in scores]) * 2 if scores else 0
+    feedback += f"\n\nFinal Overall Score: {final_score}/100"
+
+    st.subheader("📊 Performance Feedback")
+    st.write(feedback)
+
+    try:
+        gc = get_gspread_client()
+        sheet = gc.open_by_key(GOOGLE_SHEET_ID).worksheet("Sheet1")
+
+        row_data = [
+            str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            trainee_name or "Unnamed",
+            clean_text(conversation, 20000),
+            clean_text(feedback, 10000)
+        ]
+        sheet.append_row(row_data, value_input_option="RAW")
+        st.success("✅ Logged to Google Sheet!")
+    except Exception as e:
+        st.error(f"❌ Could not log to sheet: {e}")
+
+    if send_email(
+        subject="💬 Chatbot Evaluation Results",
+        body=f"Trainee: {trainee_name}\n\nFinal Score: {final_score}/100\n\nFeedback:\n{feedback}"
+    ):
+        st.success("📩 Email sent to jordan@your-agency.ca")
+
+if st.session_state.chatter_count >= 10:
+    st.info("🔚 Chat ended after 10 chatter messages.")
+    evaluate_and_email()
 
