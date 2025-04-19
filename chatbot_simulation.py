@@ -1,31 +1,40 @@
 import streamlit as st
 from openai import OpenAI
 import gspread
-from google.oauth2.service_account import Credentials
-import os
+from google_auth_oauthlib.flow import InstalledAppFlow
+from email.message import EmailMessage
+import smtplib
 import datetime
 import re
-import smtplib
-from email.message import EmailMessage
 
 # --- CONFIGURATION ---
 OPENAI_API_KEY = st.secrets["openai_api_key"]
 GOOGLE_SHEET_ID = st.secrets["google_sheet_id"]
-CREDENTIALS_PATH = st.secrets["credentials_path"]
 MAILJET_API_KEY = st.secrets["mailjet_api_key"]
 MAILJET_SECRET_KEY = st.secrets["mailjet_secret_key"]
 EMAIL_FROM = st.secrets["email_from"]
 EMAIL_TO = st.secrets["email_to"]
 SMTP_SERVER = "in-v3.mailjet.com"
 SMTP_PORT = 587
-
 client = OpenAI(api_key=OPENAI_API_KEY)
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 # --- HELPERS ---
 def get_gspread_client():
-    creds = Credentials.from_service_account_file(CREDENTIALS_PATH, scopes=scope)
+    credentials_dict = {
+        "type": "installed",
+        "client_id": st.secrets["google_credentials"]["client_id"],
+        "project_id": st.secrets["google_credentials"]["project_id"],
+        "auth_uri": st.secrets["google_credentials"]["auth_uri"],
+        "token_uri": st.secrets["google_credentials"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["google_credentials"]["auth_provider_x509_cert_url"],
+        "client_secret": st.secrets["google_credentials"]["client_secret"],
+        "redirect_uris": ["http://localhost"]
+    }
+    flow = InstalledAppFlow.from_client_config(
+        {"installed": credentials_dict},
+        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    )
+    creds = flow.run_local_server(port=0)
     return gspread.authorize(creds)
 
 def clean_text(text, limit=10000):
@@ -129,7 +138,7 @@ Conversation:
     feedback = eval_response.choices[0].message.content
 
     # Score out of 100
-    scores = re.findall(r"(\d+)/10", feedback)
+    scores = re.findall(r"(\\d+)/10", feedback)
     final_score = sum([int(s) for s in scores]) * 2 if scores else 0
     feedback += f"\n\nFinal Overall Score: {final_score}/100"
 
