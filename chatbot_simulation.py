@@ -1,13 +1,11 @@
 import streamlit as st
 from openai import OpenAI
 import gspread
-from google_auth_oauthlib.flow import InstalledAppFlow
-import smtplib
-from email.message import EmailMessage
+from google.oauth2 import service_account
 import datetime
 import re
-import json
-import os
+import smtplib
+from email.message import EmailMessage
 
 # --- CONFIGURATION ---
 OPENAI_API_KEY = st.secrets["openai_api_key"]
@@ -20,37 +18,14 @@ SMTP_SERVER = "in-v3.mailjet.com"
 SMTP_PORT = 587
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- GOOGLE SHEETS AUTH ---
+# --- AUTHENTICATE GOOGLE SHEETS ---
 def get_gspread_client():
-    creds_json = {
-        "installed": {
-            "client_id": st.secrets["google_credentials"]["client_id"],
-            "project_id": st.secrets["google_credentials"]["project_id"],
-            "auth_uri": st.secrets["google_credentials"]["auth_uri"],
-            "token_uri": st.secrets["google_credentials"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["google_credentials"]["auth_provider_x509_cert_url"],
-            "client_secret": st.secrets["google_credentials"]["client_secret"],
-            "redirect_uris": ["http://localhost"]
-        }
-    }
-
-    creds_path = "/tmp/credentials.json"
-    with open(creds_path, "w") as f:
-        json.dump(creds_json, f)
-
-    flow = InstalledAppFlow.from_client_config(
-        creds_json,
+    creds = service_account.Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     )
-
-    try:
-        creds = flow.run_local_server(port=0)
-    except:
-        creds = flow.run_console()
-
     return gspread.authorize(creds)
 
-# --- UTILITIES ---
 def clean_text(text, limit=10000):
     no_emojis = re.sub(r'[^\x00-\x7F]+', '', text)
     return no_emojis.replace("\n", " ⏎ ").replace("\r", "").strip()[:limit]
@@ -69,10 +44,10 @@ def send_email(subject, body):
             server.send_message(msg)
         return True
     except Exception as e:
-        st.error(f"Email failed to send: {e}")
+        st.error(f"📩 Email failed: {e}")
         return False
 
-# --- STREAMLIT UI ---
+# --- STREAMLIT APP UI ---
 st.set_page_config(page_title="Chatter Training Bot", layout="wide")
 st.title("💬 OnlyFans Fan Simulation Chatbot")
 st.write("Practice chatting with a simulated fan. Your goal: flirt, upsell, and build trust.")
@@ -122,14 +97,15 @@ if user_input and st.session_state.chatter_count < 10:
     st.session_state.messages.append({"role": "fan", "content": fan_reply})
     st.chat_message("fan").markdown(fan_reply)
 
-# --- EVALUATION ---
+# --- EVALUATION FUNCTION ---
 def evaluate_and_email():
     conversation = "\n".join([
         f"{m['role'].capitalize()}: {m['content']}"
         for m in st.session_state.messages
     ])
 
-    evaluation_prompt = f"""You are a trainer at an OnlyFans agency. The following is a chat between a chatter and a fan.
+    evaluation_prompt = f"""
+You are a trainer at an OnlyFans agency. The following is a chat between a chatter and a fan.
 Rate the chatter on the following out of 10:
 - Natural tone & slang usage
 - Progressive upselling
@@ -150,7 +126,6 @@ Conversation:
     )
 
     feedback = eval_response.choices[0].message.content
-
     scores = re.findall(r"(\d+)/10", feedback)
     final_score = sum([int(s) for s in scores]) * 2 if scores else 0
     feedback += f"\n\nFinal Overall Score: {final_score}/100"
@@ -158,10 +133,10 @@ Conversation:
     st.subheader("📊 Performance Feedback")
     st.write(feedback)
 
+    # --- Log to Google Sheet ---
     try:
         gc = get_gspread_client()
         sheet = gc.open_by_key(GOOGLE_SHEET_ID).worksheet("Sheet1")
-
         row_data = [
             str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             trainee_name or "Unnamed",
@@ -173,14 +148,13 @@ Conversation:
     except Exception as e:
         st.error(f"❌ Could not log to sheet: {e}")
 
+    # --- Send Email ---
     if send_email(
         subject="💬 Chatbot Evaluation Results",
         body=f"Trainee: {trainee_name}\n\nFinal Score: {final_score}/100\n\nFeedback:\n{feedback}"
     ):
         st.success("📩 Email sent to jordan@your-agency.ca")
 
-# --- TRIGGER EVAL ---
 if st.session_state.chatter_count >= 10:
     st.info("🔚 Chat ended after 10 chatter messages.")
     evaluate_and_email()
-
