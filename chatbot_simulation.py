@@ -1,11 +1,15 @@
 import streamlit as st
 from openai import OpenAI
 import gspread
-from google_auth_oauthlib.flow import InstalledAppFlow
-from email.message import EmailMessage
+from oauth2client.client import flow_from_clientsecrets
+from oauth2client.tools import run_flow
+from oauth2client.file import Storage
 import smtplib
+from email.message import EmailMessage
 import datetime
 import re
+import os
+import json
 
 # --- CONFIGURATION ---
 OPENAI_API_KEY = st.secrets["openai_api_key"]
@@ -20,23 +24,29 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # --- HELPERS ---
 def get_gspread_client():
-    credentials_dict = {
-        "type": "installed",
-        "client_id": st.secrets["google_credentials"]["client_id"],
-        "project_id": st.secrets["google_credentials"]["project_id"],
-        "auth_uri": st.secrets["google_credentials"]["auth_uri"],
-        "token_uri": st.secrets["google_credentials"]["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["google_credentials"]["auth_provider_x509_cert_url"],
-        "client_secret": st.secrets["google_credentials"]["client_secret"],
-        "redirect_uris": ["http://localhost"]
+    # Save the JSON credentials as a temp file
+    creds_json = {
+        "installed": {
+            "client_id": st.secrets["google_credentials"]["client_id"],
+            "project_id": st.secrets["google_credentials"]["project_id"],
+            "auth_uri": st.secrets["google_credentials"]["auth_uri"],
+            "token_uri": st.secrets["google_credentials"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["google_credentials"]["auth_provider_x509_cert_url"],
+            "client_secret": st.secrets["google_credentials"]["client_secret"],
+            "redirect_uris": ["http://localhost"]
+        }
     }
 
-    flow = InstalledAppFlow.from_client_config(
-        {"installed": credentials_dict},
-        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    )
+    creds_path = "/tmp/credentials.json"
+    with open(creds_path, "w") as f:
+        json.dump(creds_json, f)
 
-    creds = flow.run_console()  # ✅ final fix for headless auth
+    flow = flow_from_clientsecrets(creds_path, scope=[
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ])
+    storage = Storage("/tmp/token.json")
+    creds = run_flow(flow, storage)
     return gspread.authorize(creds)
 
 def clean_text(text, limit=10000):
@@ -170,4 +180,3 @@ Conversation:
 if st.session_state.chatter_count >= 10:
     st.info("🔚 Chat ended after 10 chatter messages.")
     evaluate_and_email()
-
