@@ -30,11 +30,13 @@ def get_gspread_client():
         "client_secret": st.secrets["google_credentials"]["client_secret"],
         "redirect_uris": ["http://localhost"]
     }
+
     flow = InstalledAppFlow.from_client_config(
         {"installed": credentials_dict},
         scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     )
-    creds = flow.run_console()
+
+    creds = flow.run_local_server(port=0)  # Fallback that works on most Streamlit setups
     return gspread.authorize(creds)
 
 def clean_text(text, limit=10000):
