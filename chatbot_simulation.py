@@ -36,7 +36,7 @@ def get_gspread_client():
         scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     )
 
-    creds = flow.run_local_server(port=0)  # Fallback that works on most Streamlit setups
+    creds = flow.run_console()  # ✅ final fix for headless auth
     return gspread.authorize(creds)
 
 def clean_text(text, limit=10000):
