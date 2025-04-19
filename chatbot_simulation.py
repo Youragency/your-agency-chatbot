@@ -7,31 +7,29 @@ import re
 import smtplib
 from email.message import EmailMessage
 
-# === CONFIGURATION ===
+# --- CONFIGURATION ---
 OPENAI_API_KEY = st.secrets["openai_api_key"]
 GOOGLE_SHEET_ID = st.secrets["google_sheet_id"]
 MAILJET_API_KEY = st.secrets["mailjet_api_key"]
 MAILJET_SECRET_KEY = st.secrets["mailjet_secret_key"]
-EMAIL_FROM = "jordankeane7789@gmail.com"
-EMAIL_TO = "jordan@your-agency.ca"
+EMAIL_FROM = st.secrets["email_from"]
+EMAIL_TO = st.secrets["email_to"]
 SMTP_SERVER = "in-v3.mailjet.com"
 SMTP_PORT = 587
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# === GOOGLE SHEETS AUTH ===
+# --- GOOGLE SHEETS AUTH ---
 def get_gspread_client():
     creds = service_account.Credentials.from_service_account_info(
         st.secrets["google_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     )
     return gspread.authorize(creds)
 
-# === CLEAN TEXT ===
 def clean_text(text, limit=10000):
     no_emojis = re.sub(r'[^\x00-\x7F]+', '', text)
     return no_emojis.replace("\n", " ⏎ ").replace("\r", "").strip()[:limit]
 
-# === SEND EMAIL ===
 def send_email(subject, body):
     try:
         msg = EmailMessage()
@@ -49,7 +47,7 @@ def send_email(subject, body):
         st.error(f"📩 Email failed: {e}")
         return False
 
-# === STREAMLIT UI ===
+# --- STREAMLIT APP ---
 st.set_page_config(page_title="Chatter Training Bot", layout="wide")
 st.title("💬 OnlyFans Fan Simulation Chatbot")
 st.write("Practice chatting with a simulated fan. Your goal: flirt, upsell, and build trust.")
@@ -99,7 +97,7 @@ if user_input and st.session_state.chatter_count < 10:
     st.session_state.messages.append({"role": "fan", "content": fan_reply})
     st.chat_message("fan").markdown(fan_reply)
 
-# === EVALUATION ===
+# --- EVALUATION ---
 def evaluate_and_email():
     conversation = "\n".join([
         f"{m['role'].capitalize()}: {m['content']}"
@@ -135,7 +133,7 @@ Conversation:
     st.subheader("📊 Performance Feedback")
     st.write(feedback)
 
-    # === Log to Google Sheet ===
+    # --- Log to Sheet ---
     try:
         gc = get_gspread_client()
         sheet = gc.open_by_key(GOOGLE_SHEET_ID).worksheet("Sheet1")
@@ -150,12 +148,12 @@ Conversation:
     except Exception as e:
         st.error(f"❌ Could not log to sheet: {e}")
 
-    # === Send Email ===
+    # --- Email Results ---
     if send_email(
         subject="💬 Chatbot Evaluation Results",
         body=f"Trainee: {trainee_name}\n\nFinal Score: {final_score}/100\n\nFeedback:\n{feedback}"
     ):
-        st.success("📩 Email sent to jordan@your-agency.ca")
+        st.success("📩 Email sent successfully to jordan@your-agency.ca")
 
 if st.session_state.chatter_count >= 10:
     st.info("🔚 Chat ended after 10 chatter messages.")
