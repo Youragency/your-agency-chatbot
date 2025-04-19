@@ -27,6 +27,8 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 def clean_text(text, limit=10000):
+    if not text or not isinstance(text, str):
+        return "No content"
     no_emojis = re.sub(r'[^\x00-\x7F]+', '', text)
     return no_emojis.replace("\n", " ⏎ ").replace("\r", "").strip()[:limit]
 
@@ -42,9 +44,11 @@ def send_email(subject, body):
             server.starttls()
             server.login(MAILJET_API_KEY, MAILJET_SECRET_KEY)
             server.send_message(msg)
+
+        st.success(f"📩 Email sent successfully to {EMAIL_TO}")
         return True
     except Exception as e:
-        st.error(f"📩 Email failed: {e}")
+        st.error(f"❌ Email failed to send: {e}")
         return False
 
 # --- STREAMLIT APP UI ---
@@ -104,8 +108,7 @@ def evaluate_and_email():
         for m in st.session_state.messages
     ])
 
-    evaluation_prompt = f"""
-You are a trainer at an OnlyFans agency. The following is a chat between a chatter and a fan.
+    evaluation_prompt = f"""You are a trainer at an OnlyFans agency. The following is a chat between a chatter and a fan.
 Rate the chatter on the following out of 10:
 - Natural tone & slang usage
 - Progressive upselling
@@ -133,7 +136,7 @@ Conversation:
     st.subheader("📊 Performance Feedback")
     st.write(feedback)
 
-    # --- Log to Google Sheet ---
+    # Log to Google Sheets
     try:
         gc = get_gspread_client()
         sheet = gc.open_by_key(GOOGLE_SHEET_ID).worksheet("Sheet1")
@@ -148,13 +151,13 @@ Conversation:
     except Exception as e:
         st.error(f"❌ Could not log to sheet: {e}")
 
-    # --- Send Email ---
-    if send_email(
+    # Send feedback via email
+    send_email(
         subject="💬 Chatbot Evaluation Results",
         body=f"Trainee: {trainee_name}\n\nFinal Score: {final_score}/100\n\nFeedback:\n{feedback}"
-    ):
-        st.success("📩 Email sent to jordan@your-agency.ca")
+    )
 
 if st.session_state.chatter_count >= 10:
     st.info("🔚 Chat ended after 10 chatter messages.")
     evaluate_and_email()
+
