@@ -1,7 +1,6 @@
 streamlit
 openai
-google-api-python-client
+gspread
 google-auth
 google-auth-oauthlib
-python-dotenv
 requests
