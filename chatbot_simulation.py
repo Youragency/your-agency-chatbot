@@ -1,15 +1,13 @@
 import streamlit as st
 from openai import OpenAI
 import gspread
-from oauth2client.client import flow_from_clientsecrets
-from oauth2client.tools import run_flow
-from oauth2client.file import Storage
+from google_auth_oauthlib.flow import InstalledAppFlow
 import smtplib
 from email.message import EmailMessage
 import datetime
 import re
-import os
 import json
+import os
 
 # --- CONFIGURATION ---
 OPENAI_API_KEY = st.secrets["openai_api_key"]
@@ -22,9 +20,8 @@ SMTP_SERVER = "in-v3.mailjet.com"
 SMTP_PORT = 587
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- HELPERS ---
+# --- GOOGLE SHEETS AUTH ---
 def get_gspread_client():
-    # Save the JSON credentials as a temp file
     creds_json = {
         "installed": {
             "client_id": st.secrets["google_credentials"]["client_id"],
@@ -41,14 +38,19 @@ def get_gspread_client():
     with open(creds_path, "w") as f:
         json.dump(creds_json, f)
 
-    flow = flow_from_clientsecrets(creds_path, scope=[
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ])
-    storage = Storage("/tmp/token.json")
-    creds = run_flow(flow, storage)
+    flow = InstalledAppFlow.from_client_config(
+        creds_json,
+        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    )
+
+    try:
+        creds = flow.run_local_server(port=0)
+    except:
+        creds = flow.run_console()
+
     return gspread.authorize(creds)
 
+# --- UTILITIES ---
 def clean_text(text, limit=10000):
     no_emojis = re.sub(r'[^\x00-\x7F]+', '', text)
     return no_emojis.replace("\n", " ⏎ ").replace("\r", "").strip()[:limit]
@@ -120,7 +122,7 @@ if user_input and st.session_state.chatter_count < 10:
     st.session_state.messages.append({"role": "fan", "content": fan_reply})
     st.chat_message("fan").markdown(fan_reply)
 
-# END CHAT AFTER 10 CHATTER MESSAGES
+# --- EVALUATION ---
 def evaluate_and_email():
     conversation = "\n".join([
         f"{m['role'].capitalize()}: {m['content']}"
@@ -177,6 +179,8 @@ Conversation:
     ):
         st.success("📩 Email sent to jordan@your-agency.ca")
 
+# --- TRIGGER EVAL ---
 if st.session_state.chatter_count >= 10:
     st.info("🔚 Chat ended after 10 chatter messages.")
     evaluate_and_email()
+
