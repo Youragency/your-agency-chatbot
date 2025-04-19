@@ -30,24 +30,29 @@ def clean_text(text, limit=10000):
     no_emojis = re.sub(r'[^\x00-\x7F]+', '', text)
     return no_emojis.replace("\n", " ⏎ ").replace("\r", "").strip()[:limit]
 
+# --- UPDATED EMAIL FUNCTION ---
 def send_email(subject, body):
     try:
         msg = EmailMessage()
         msg.set_content(body)
         msg["Subject"] = subject
-        msg["From"] = EMAIL_FROM
+        msg["From"] = f"Jordan <{EMAIL_FROM}>"
         msg["To"] = EMAIL_TO
 
+        print(f"Sending email from {EMAIL_FROM} to {EMAIL_TO}")
+
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.set_debuglevel(1)  # DEBUGGING OUTPUT
             server.starttls()
             server.login(MAILJET_API_KEY, MAILJET_SECRET_KEY)
             server.send_message(msg)
+
         return True
     except Exception as e:
-        st.error(f"📩 Email failed: {e}")
+        st.error(f"📩 Email failed to send: {e}")
         return False
 
-# --- STREAMLIT APP ---
+# --- STREAMLIT UI ---
 st.set_page_config(page_title="Chatter Training Bot", layout="wide")
 st.title("💬 OnlyFans Fan Simulation Chatbot")
 st.write("Practice chatting with a simulated fan. Your goal: flirt, upsell, and build trust.")
@@ -133,7 +138,6 @@ Conversation:
     st.subheader("📊 Performance Feedback")
     st.write(feedback)
 
-    # --- Log to Sheet ---
     try:
         gc = get_gspread_client()
         sheet = gc.open_by_key(GOOGLE_SHEET_ID).worksheet("Sheet1")
@@ -148,7 +152,6 @@ Conversation:
     except Exception as e:
         st.error(f"❌ Could not log to sheet: {e}")
 
-    # --- Email Results ---
     if send_email(
         subject="💬 Chatbot Evaluation Results",
         body=f"Trainee: {trainee_name}\n\nFinal Score: {final_score}/100\n\nFeedback:\n{feedback}"
@@ -158,3 +161,4 @@ Conversation:
 if st.session_state.chatter_count >= 10:
     st.info("🔚 Chat ended after 10 chatter messages.")
     evaluate_and_email()
+
