@@ -34,11 +34,11 @@ def get_gspread_client():
         {"installed": credentials_dict},
         scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     )
-    creds = flow.run_local_server(port=0)
+    creds = flow.run_console()
     return gspread.authorize(creds)
 
 def clean_text(text, limit=10000):
-    no_emojis = re.sub(r'[^\x00-\x7F]+', '', text)  # Remove emojis & non-ASCII
+    no_emojis = re.sub(r'[^\x00-\x7F]+', '', text)
     return no_emojis.replace("\n", " ⏎ ").replace("\r", "").strip()[:limit]
 
 def send_email(subject, body):
@@ -137,8 +137,7 @@ Conversation:
 
     feedback = eval_response.choices[0].message.content
 
-    # Score out of 100
-    scores = re.findall(r"(\\d+)/10", feedback)
+    scores = re.findall(r"(\d+)/10", feedback)
     final_score = sum([int(s) for s in scores]) * 2 if scores else 0
     feedback += f"\n\nFinal Overall Score: {final_score}/100"
 
